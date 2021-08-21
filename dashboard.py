@@ -50,6 +50,7 @@ df_columns = {'Ticker Symbol':'ticker', 'Expiration Date (Local)':'exp_date', 'O
 app.layout = html.Div([
 
     dcc.Store(id='storage-historical'),
+    dcc.Store(id='storage-option-chain'),
 
     # html.H1("TOS Options Wheel Dashboard", style={'text-align': 'center'}),
     dbc.Navbar(
@@ -517,11 +518,27 @@ def get_historical_prices(n_clicks, ticker_ls):
 
     return json_data
 
+# Temporarily stores JSON data in the browser (generally safe to store up to 2MB of data)
+@app.callback(Output('storage-option-chain', 'data'),
+            [Input('submit-button-state', 'n_clicks')],
+            [State('memory-ticker', 'value')])
+def get_option_chain(n_clicks, ticker_ls):
+
+    if ticker_ls is None:
+        raise PreventUpdate 
+
+    json_data = {}
+
+    for ticker in ticker_ls:
+        json_data[ticker] = tos_get_option_chain(ticker, contractType='ALL', rangeType='ALL', apiKey=API_KEY) 
+
+    return json_data
+
 # Update Ticker Table from API Response call
 @app.callback(Output('ticker-data-table', 'data'),
-              [Input('submit-button-state', 'n_clicks'), Input('storage-historical', 'data'), Input('ticker-data-table', "page_current"), Input('ticker-data-table', "page_size"), Input('ticker-data-table', "sort_by")],
+              [Input('submit-button-state', 'n_clicks'), Input('storage-historical', 'data'), Input('storage-option-chain', 'data'), Input('ticker-data-table', "page_current"), Input('ticker-data-table', "page_size"), Input('ticker-data-table', "sort_by")],
               [State('memory-ticker', 'value')])
-def on_data_set_ticker_table(n_clicks, hist_data, page_current, page_size, sort_by, ticker_ls):
+def on_data_set_ticker_table(n_clicks, hist_data, option_chain_data, page_current, page_size, sort_by, ticker_ls):
     
     # Define empty list to be accumulate into Pandas dataframe (Source: https://stackoverflow.com/questions/10715965/add-one-row-to-pandas-dataframe)
     insert = []
@@ -530,7 +547,7 @@ def on_data_set_ticker_table(n_clicks, hist_data, page_current, page_size, sort_
         raise PreventUpdate 
 
     for ticker in ticker_ls: 
-        option_chain_response = tos_get_option_chain(ticker, contractType='ALL', rangeType='ALL', apiKey=API_KEY)  
+        option_chain_response = option_chain_data[ticker]
         hist_price = hist_data[ticker]
 
         # Sanity check on API response data
@@ -658,9 +675,9 @@ def on_data_set_ticker_table(n_clicks, hist_data, page_current, page_size, sort_
 
 # Update Table based on stored JSON value from API Response call 
 @app.callback(Output('option-chain-table', 'data'),
-              [Input('submit-button-state', 'n_clicks'), Input('storage-historical', 'data'), Input('option-chain-table', "page_current"), Input('option-chain-table', "page_size"), Input('option-chain-table', "sort_by")],
+              [Input('submit-button-state', 'n_clicks'), Input('storage-historical', 'data'), Input('storage-option-chain', 'data'), Input('option-chain-table', "page_current"), Input('option-chain-table', "page_size"), Input('option-chain-table', "sort_by")],
               [State('memory-ticker', 'value'), State('memory-contract-type','value'), State('memory-roi', 'value'), State('memory-delta', 'value'),  State('memory-expdays','value'), State('memory-confidence','value'), State('memory-vol-period','value')])
-def on_data_set_table(n_clicks, hist_data, page_current, page_size, sort_by, ticker_ls, contract_type, roi_selection, delta_range, expday_range, confidence_lvl, volatility_period):
+def on_data_set_table(n_clicks, hist_data, option_chain_data, page_current, page_size, sort_by, ticker_ls, contract_type, roi_selection, delta_range, expday_range, confidence_lvl, volatility_period):
     
     # Define empty list to be accumulate into Pandas dataframe (Source: https://stackoverflow.com/questions/10715965/add-one-row-to-pandas-dataframe)
     insert = []
@@ -669,7 +686,7 @@ def on_data_set_table(n_clicks, hist_data, page_current, page_size, sort_by, tic
         raise PreventUpdate 
 
     for ticker in ticker_ls: 
-        option_chain_response = tos_get_option_chain(ticker, contractType=contract_type, apiKey=API_KEY)  
+        option_chain_response =  option_chain_data[ticker]
         hist_price = hist_data[ticker]
 
         # Sanity check on API response data
